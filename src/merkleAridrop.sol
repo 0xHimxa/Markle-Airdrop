@@ -17,7 +17,7 @@ event Claim(address indexed user, uint256 amount);
 
 
 
-    bytes32 private immutable  i_merkleRoot;
+    bytes32 private  immutable  i_merkleRoot;
     IERC20 private immutable i_airdropToken;
   mapping(address hasClaimed => bool) private s_hasClaimed;
 
