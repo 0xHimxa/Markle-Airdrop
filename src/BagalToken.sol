@@ -1,19 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {Ownable} from  "@openzeppelin/contracts/access/Ownable.sol";
-
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract BagalToken is ERC20, Ownable {
+    constructor() ERC20("Bengel", "BAGEL") Ownable(msg.sender) {}
 
-constructor() ERC20("Bengel","BAGEL") Ownable(msg.sender){
-
-}
-
-function mint(address to, uint amount) external onlyOwner{
-    _mint(to, amount);
-
-}
-
-
+    function mint(address to, uint256 amount) external onlyOwner {
+        _mint(to, amount);
+    }
 }

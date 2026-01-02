@@ -3,73 +3,86 @@ pragma solidity ^0.8.19;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
+contract MerkleAirdrop is EIP712 {
+    error MerkleAirdrop__InvalidProof();
+    error MerkleAirdrop__AlreadyClaimed();
+    error MerkleAirdrop__InvalidSignature();
 
-contract MerkleAirdrop{
+    event Claim(address indexed user, uint256 amount);
 
-
-error  MerkleAirdrop__InvalidProof();
-error  MerkleAirdrop__AlreadyClaimed();
-
-event Claim(address indexed user, uint256 amount);
-
-
-
-
-
-    bytes32 private  immutable  i_merkleRoot;
+    bytes32 private immutable i_merkleRoot;
     IERC20 private immutable i_airdropToken;
-  mapping(address hasClaimed => bool) private s_hasClaimed;
+    mapping(address hasClaimed => bool) private s_hasClaimed;
+    // the message type hash
 
+    bytes32 private constant MESSAGE_TYPEHASH = keccak256("AirdropClaim(address account,uint256 amount)");
 
+    using SafeERC20 for IERC20;
 
-using SafeERC20 for IERC20;
+    struct AirdropClaim {
+        address account;
+        uint256 amount;
+    }
 
-
-constructor(bytes32 merkleRoot, IERC20 token){
+    constructor(bytes32 merkleRoot, IERC20 token) EIP712("MerkleAirdrop", "1") {
         i_merkleRoot = merkleRoot;
         i_airdropToken = token;
-    
-
-
     }
 
+    // to understandsuff that happen below
 
-    function claim(address account,uint256 amount,bytes32[] calldata merkleProof) external{
+    // learn about signatures and account abstraction tho that will be cover next in the courst
 
-//hashe the proof twise to avoid colition
-        bytes32  leaf = keccak256(bytes.concat(keccak256(abi.encode(account,amount))));
+    function claim(address account, uint256 amount, bytes32[] calldata merkleProof, uint8 v, bytes32 r, bytes32 s)
+        external
+    {
+        if (s_hasClaimed[account]) {
+            revert MerkleAirdrop__AlreadyClaimed();
+        }
 
-if(!MerkleProof.verify(merkleProof, i_merkleRoot, leaf)){
-    revert MerkleAirdrop__InvalidProof();
-}
+        if (!_isValidSignature(account, getMessage(account, amount), v, r, s)) {
+            revert MerkleAirdrop__InvalidSignature();
+        }
 
-if(s_hasClaimed[account]){
-    revert MerkleAirdrop__AlreadyClaimed();
-}
+        //hashe the proof twise to avoid colition
+        bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(account, amount))));
 
-s_hasClaimed[account] = true;
+        if (!MerkleProof.verify(merkleProof, i_merkleRoot, leaf)) {
+            revert MerkleAirdrop__InvalidProof();
+        }
 
-emit Claim(account, amount);
-i_airdropToken.safeTransfer(account, amount);
+        s_hasClaimed[account] = true;
 
-
-
-
+        emit Claim(account, amount);
+        i_airdropToken.safeTransfer(account, amount);
     }
 
+    function getMessage(address account, uint256 amount) public view returns (bytes32) {
+        return
+            _hashTypedDataV4(keccak256(abi.encode(MESSAGE_TYPEHASH, AirdropClaim({account: account, amount: amount}))));
+    }
 
-    function getMerkleRoot() public view returns (bytes32){
+    function getMerkleRoot() public view returns (bytes32) {
         return i_merkleRoot;
     }
 
-    function getAirdropToken() public view returns (IERC20){
+    function getAirdropToken() public view returns (IERC20) {
         return i_airdropToken;
     }
 
-    function hasClaimed(address account) public view returns (bool){
+    function hasClaimed(address account) public view returns (bool) {
         return s_hasClaimed[account];
     }
 
-
+    function _isValidSignature(address account, bytes32 digest, uint8 v, bytes32 r, bytes32 s)
+        internal
+        pure
+        returns (bool)
+    {
+        (address actualSigner,,) = ECDSA.tryRecover(digest, v, r, s);
+        return actualSigner == account;
+    }
 }
